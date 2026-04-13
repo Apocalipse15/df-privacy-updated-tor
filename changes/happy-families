@@ -1,0 +1,17 @@
+  o Major feature (happy families):
+
+    - Clients and relays now support "happy families", a system to
+      simplify relay family operation and improve directory performance.
+      With "happy families", relays in a family shares a secret "family key",
+      which they use to prove their membership in the family.
+      Implements proposal 321; closes ticket 41009.
+
+      Note that until enough clients are upgraded,
+      relay operators will still need to configure MyFamily lists.
+      But once clients no longer depend on those lists,
+      we will be able to remove them entirely,
+      thereby simplifying family operation,
+      and making microdescriptor downloads approximately 80% smaller.
+
+      For more information, see
+      https://community.torproject.org/relay/setup/post-install/family-ids/

@@ -1,0 +1,2 @@
+  o Minor features (compilation):
+    - Fix a warning when compiling with GCC 14.2.  Closes 41032.

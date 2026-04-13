@@ -1,0 +1,4 @@
+  o Major features (client):
+    - Clients now respect "happy families" per proposal 321.
+      This feature will eventually allow a much more compact representation
+      for relay families, for a significant savings in directory download size.

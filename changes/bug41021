@@ -1,0 +1,4 @@
+  o Minor bugfixes (tests):
+    - Fix a test failure with OpenSSL builds running at security level 1 or
+      greater, which does not permit SHA-1 certificates.
+      (Fixes bug 41021; bugfix on 0.2.8.1-alpha.)
