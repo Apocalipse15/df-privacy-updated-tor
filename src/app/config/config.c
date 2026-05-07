@@ -3147,10 +3147,13 @@ options_validate_scheduler(or_options_t *options, char **msg)
       strcasecmp(options->PrivSchedulerDistribution, "UNIFORM") &&
       strcasecmp(options->PrivSchedulerDistribution, "POISSON") &&
       strcasecmp(options->PrivSchedulerDistribution, "LAPLACE") &&
+      strcasecmp(options->PrivSchedulerDistribution, "PARETO") &&
+      strcasecmp(options->PrivSchedulerDistribution, "BERNOULLI") &&
+      strcasecmp(options->PrivSchedulerDistribution, "RANDOMIZED_RESPONSE") &&
       strcasecmp(options->PrivSchedulerDistribution, "EXPONENTIAL")) {
     tor_asprintf(
         msg,
-        "PrivSchedulerDistribution must be either LAPLACE, NORMAL, UNIFORM, POISSON or "
+        "PrivSchedulerDistribution must be either LAPLACE, NORMAL, UNIFORM, POISSON, PARETO, BERNOULLI, RANDOMIZED_RESPONSE or "
         "EXPONENTIAL, not %s",
         options->PrivSchedulerDistribution);
     return -1;

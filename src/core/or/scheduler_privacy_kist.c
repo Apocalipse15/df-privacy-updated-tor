@@ -44,7 +44,7 @@
 #  include <linux/sockios.h>
 #endif /* HAVE_KIST_SUPPORT */
 
-#include "lib/dprivacy/dp_mech.h"
+#include "lib/dprivacy_updated/dp_mech_updated.h"
 
 /*****************************************************************************
  * Differential Privacy Logic
