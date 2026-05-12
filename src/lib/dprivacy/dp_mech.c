@@ -21,6 +21,11 @@ static int exponential_mechanism(double epsilon, int target, int lower,
 static int laplace_mechanism(double epsilon, int target, int lower, int upper);
 static int poisson_mechanism(double epsilon, int target, int lower, int upper);
 static int normal_mechanism(double epsilon, int target, int lower, int upper);
+static int pareto_mechanism(double epsilon, int target, int lower, int upper);
+static int bernoulli_mechanism(double epsilon, int target, int lower, int upper);
+static int hybrid_mechanism_all_mechanisms(double epsilon, int target, int lower, int upper);
+static int hybrid_prob_mechanism(double epsilon, int target, int lower, int upper,
+                                char *probabilities_str);
 
 static double uniform(void);
 static double sample_laplace(double scale);
@@ -31,6 +36,8 @@ const double DEFAULT_SENSITIVITY =
     1.0; /** < Default sensitivity for DP mechanisms */
 const double DEFAULT_DELTA =
     1e-5; /** < Default delta for DP mechanisms, used in Normal mechanism */
+
+static unsigned int last_used_mechanism = DP_MECHANISM_UNKNOWN;
 
 dp_mechanism_t
 string_to_dp_mechanism_type(char *mechanism_str)
@@ -47,10 +54,18 @@ string_to_dp_mechanism_type(char *mechanism_str)
     return DP_MECHANISM_NORMAL;
   } else if (!strcasecmp(mechanism_str, "RANDOMIZED_RESPONSE")) {
     return DP_MECHANISM_RAND_RESPONSE;
+  } else if (!strcasecmp(mechanism_str, "PARETO")) {
+    return DP_MECHANISM_PARETO;
+  } else if (!strcasecmp(mechanism_str, "BERNOULLI")) {
+    return DP_MECHANISM_BERNOULLI;
+  } else if (!strcasecmp(mechanism_str, "HYBRID")) {
+    return DP_HYBRID_MECHANISM;
+  } else if (!strcasecmp(mechanism_str, "HYBRID_PROB")) {
+    return DP_MECHANISM_HYBRID_PROB;
   } else {
     log_warn(LD_BUG,
              "Unknown Differential Private Mechanism: %s!"
-             "Only accept uniform, exponential & rand_response",
+             "Only accept uniform, exponential, pareto, bernoulli, hybrid & rand_response",
              mechanism_str);
     return DP_MECHANISM_UNKNOWN; // Default to uniform
   }
@@ -72,12 +87,20 @@ dp_mechanism_type_to_string(dp_mechanism_t mechanism)
     return "NORMAL";
   case DP_MECHANISM_RAND_RESPONSE:
     return "RANDOMIZED_RESPONSE";
+  case DP_MECHANISM_PARETO:
+    return "PARETO";
+  case DP_MECHANISM_BERNOULLI:
+    return "BERNOULLI";
+  case DP_HYBRID_MECHANISM:
+    return "HYBRID";
+  case DP_MECHANISM_HYBRID_PROB:
+    return "HYBRID_PROB";
   case DP_MECHANISM_UNKNOWN:
   default:
     log_warn(LD_BUG,
              "Unknown Differential Private Mechanism: %d!"
              "Only accept DP_MECHANISM_UNIFORM, DP_MECHANISM_EXPONENTIAL"
-             "& DP_MECHANISM_RAND_RESPONSE",
+             ",DP_MECHANISM_RAND_RESPONSE, DP_MECHANISM_POISSON, DP_MECHANISM_LAPLACE, DP_MECHANISM_NORMAL, DP_MECHANISM_PARETO, DP_MECHANISM_HYBRID_PROB & DP_MECHANISM_BERNOULLI",
              mechanism);
     return "UNKNOWN"; // Should not happen
   }
@@ -120,12 +143,21 @@ dp_generate_int(int min, int max, int target, double epsilon,
   case DP_MECHANISM_UNIFORM:
   case DP_MECHANISM_RAND_RESPONSE: // Will fall through to uniform
     return uniform_mechanism(min, max);
+  case DP_MECHANISM_PARETO:
+    return pareto_mechanism(epsilon, target, min, max);
+  case DP_MECHANISM_BERNOULLI:
+    return bernoulli_mechanism(epsilon, target, min, max);
+  case DP_HYBRID_MECHANISM:
+    return hybrid_mechanism_all_mechanisms(epsilon, target, min, max);
+  case DP_MECHANISM_HYBRID_PROB:
+    log_warn(LD_BUG, "HYBRID_PROB mechanism is not implemented yet. Defaulting to HYBRID.");
+    return hybrid_mechanism_all_mechanisms(epsilon, target, min, max);
   case DP_MECHANISM_UNKNOWN:
   default:
     log_warn(LD_BUG,
-             "Unknown Differential Private Mechanism: %d!"
-             "Only accept DP_MECHANISM_EXPONENTIAL, DP_MECHANISM_RAND_RESPONSE"
-             "& DP_MECHANISM_UNIFORM",
+             "Unknown Differential Private Mechanism: %d! "
+             "Only accept DP_MECHANISM_EXPONENTIAL, DP_MECHANISM_RAND_RESPONSE, "
+             "DP_MECHANISM_PARETO, DP_MECHANISM_BERNOULLI & DP_MECHANISM_UNIFORM",
              mechanism);
     return target;
   }
@@ -134,6 +166,75 @@ dp_generate_int(int min, int max, int target, double epsilon,
 /******************************************************************
  * Distribution Mechanisms
  ******************************************************************/
+static int hybrid_mechanism_all_mechanisms(double epsilon, int target, int lower, int upper) {
+  int total_number_of_mechanisms = 8; // TODO: See a way to automate this once
+  log_warn(LD_SCHED, "Using Hybrid mechanism. Randomly selecting a mechanism for this run. Last Mechanism: %s", dp_mechanism_type_to_string(last_used_mechanism));
+  if(last_used_mechanism == DP_MECHANISM_UNKNOWN || randomized_response(true, epsilon)) {
+    last_used_mechanism = (dp_mechanism_t)(rand() % total_number_of_mechanisms);
+  }
+
+  return dp_generate_int(lower, upper, target, epsilon, last_used_mechanism);
+}
+
+static int hybrid_prob_mechanism(double epsilon, int target, int lower, int upper,
+                                char *probabilities_str) {
+
+  log_warn(LD_BUG, "HYBRID_PROB mechanism is not implemented yet. Defaulting to HYBRID.");
+  return hybrid_mechanism_all_mechanisms(epsilon, target, lower, upper);
+}
+
+static int
+bernoulli_mechanism(double epsilon, int target, int lower, int upper){
+  if (epsilon < 0.0) {
+    return target; 
+  }
+
+  double p = exp(epsilon) / (exp(epsilon) + 1.0);
+
+  if (uniform() < p) {
+    return target;  
+  }
+
+  int noise = (uniform() < 0.5) ? -1 : 1;
+  int result = target + noise;
+
+  return CLAMP(lower, result, upper);
+}
+
+static int
+pareto_mechanism(double epsilon, int target, int lower, int upper){
+    if (epsilon <= 0.0) {
+        return target;
+    }
+
+    double alpha = epsilon;
+    double xm = 1.0;
+
+    double u;
+
+    /* avoid u == 0 */
+    do {
+        u = uniform();
+    } while (u <= 0.0);
+
+    double pareto_sample = xm / pow(u, 1.0 / alpha);
+
+    /* random sign */
+    if (uniform() < 0.5) {
+        pareto_sample = -pareto_sample;
+    }
+
+    int result = target + (int)round(pareto_sample);
+
+    log_warn(LD_SCHED, "Pareto mechanism generated noise: %f", pareto_sample); // TODO: Change to log_debug after testing
+
+    /* clamp manually */
+    if (result < lower) result = lower;
+    if (result > upper) result = upper;
+
+    return result;
+}
+
 static bool
 randomized_response(bool true_value, double epsilon)
 {

@@ -19,6 +19,8 @@ typedef enum {
   DP_MECHANISM_RAND_RESPONSE, /** < Randomized response mechanism */
   DP_MECHANISM_PARETO, /** < Pareto mechanism */
   DP_MECHANISM_BERNOULLI, /** < Bernoulli mechanism */
+  DP_HYBRID_MECHANISM, /** < Hybrid mechanism */
+  DP_MECHANISM_HYBRID_PROB, /** < Hybrid mechanism with probabilities */
   DP_MECHANISM_UNKNOWN
 } dp_mechanism_t;
 

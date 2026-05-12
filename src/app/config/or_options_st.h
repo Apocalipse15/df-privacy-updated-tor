@@ -1104,6 +1104,7 @@ struct or_options_t {
   /** Differential Privacy Scheduler Configuration */
   char *PrivSchedulerDistribution;
   double PrivSchedulerEpsilon;
+  char *PrivDistributionProbabilities; /**< A comma-separated list of probabilities for each distribution in PrivSchedulerDistribution. */
 
   /** Jitter oriented Differential Privacy Configs for Schedulers PrivVanilla &
    * PrivKIST */

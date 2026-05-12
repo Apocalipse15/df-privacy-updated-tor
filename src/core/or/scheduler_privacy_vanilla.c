@@ -24,7 +24,7 @@
 #define SCHEDULER_PRIVATE
 #include "core/or/scheduler.h"
 
-#include "lib/dprivacy_updated/dp_mech_updated.h"
+#include "lib/dprivacy/dp_mech.h"
 
 /*****************************************************************************
  * Differential Privacy Logics

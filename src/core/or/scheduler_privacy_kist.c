@@ -44,7 +44,7 @@
 #  include <linux/sockios.h>
 #endif /* HAVE_KIST_SUPPORT */
 
-#include "lib/dprivacy_updated/dp_mech_updated.h"
+#include "lib/dprivacy/dp_mech.h"
 
 /*****************************************************************************
  * Differential Privacy Logic
@@ -70,7 +70,7 @@ privacy_kist_scheduler_set_next_run(unsigned int *sched_interval)
   priv_sched_next_run =
       dp_generate_int(sched_kist_jitter.min, sched_kist_jitter.max,
                       sched_kist_jitter.target, priv_epsilon, dp_mechanism);
-  log_debug(LD_SCHED, "Next run interval set to %d ms", *sched_interval);
+  log_warn(LD_SCHED, "Next run interval set to %d ms", *sched_interval); // TODO: Change to log_debug after testing
 }
 
 /*****************************************************************************

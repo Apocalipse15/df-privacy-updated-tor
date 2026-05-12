@@ -677,6 +677,7 @@ static const config_var_t option_vars_[] = {
     /** Differential Private Scheduler Configurations  */
     V(PrivSchedulerDistribution, STRING, "UNIFORM"),
     V(PrivSchedulerEpsilon, DOUBLE, "-1.0"),
+    V(PrivDistributionProbabilities, STRING, "0.2,0.2,0.2,0.2,0.2,0.2,0.2"),
 
     /** Jitter Oriented Differential Private Scheduler Configurations  */
 
@@ -3142,6 +3143,11 @@ options_validate_scheduler(or_options_t *options, char **msg)
   }
 
   /** Differential Private Schedulers Verifications */
+  if(true){
+    tor_asprintf(msg,
+                 "Probabilities in relation with hybrid are: %s",
+                 options->PrivDistributionProbabilities);
+  }
 
   if (strcasecmp(options->PrivSchedulerDistribution, "NORMAL") &&
       strcasecmp(options->PrivSchedulerDistribution, "UNIFORM") &&
@@ -3150,10 +3156,12 @@ options_validate_scheduler(or_options_t *options, char **msg)
       strcasecmp(options->PrivSchedulerDistribution, "PARETO") &&
       strcasecmp(options->PrivSchedulerDistribution, "BERNOULLI") &&
       strcasecmp(options->PrivSchedulerDistribution, "RANDOMIZED_RESPONSE") &&
+      strcasecmp(options->PrivSchedulerDistribution, "HYBRID") &&
+      strcasecmp(options->PrivSchedulerDistribution, "HYBRID_PROB") &&
       strcasecmp(options->PrivSchedulerDistribution, "EXPONENTIAL")) {
     tor_asprintf(
         msg,
-        "PrivSchedulerDistribution must be either LAPLACE, NORMAL, UNIFORM, POISSON, PARETO, BERNOULLI, RANDOMIZED_RESPONSE or "
+        "PrivSchedulerDistribution must be either LAPLACE, NORMAL, UNIFORM, POISSON, PARETO, BERNOULLI, HYBRID, RANDOMIZED_RESPONSE or "
         "EXPONENTIAL, not %s",
         options->PrivSchedulerDistribution);
     return -1;
