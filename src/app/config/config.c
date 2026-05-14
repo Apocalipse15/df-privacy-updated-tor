@@ -677,7 +677,7 @@ static const config_var_t option_vars_[] = {
     /** Differential Private Scheduler Configurations  */
     V(PrivSchedulerDistribution, STRING, "UNIFORM"),
     V(PrivSchedulerEpsilon, DOUBLE, "-1.0"),
-    V(PrivDistributionProbabilities, STRING, "0.2,0.2,0.2,0.2,0.2,0.2,0.2"),
+    V(PrivDistributionProbabilities, STRING, "0.14_0.14_0.14_0.14_0.14_0.14_0.14"),
 
     /** Jitter Oriented Differential Private Scheduler Configurations  */
 

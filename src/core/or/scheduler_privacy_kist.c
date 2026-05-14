@@ -55,6 +55,7 @@ static unsigned int priv_sched_next_run;
 
 static double priv_epsilon = 0.0;
 static dp_mechanism_t dp_mechanism = DP_MECHANISM_UNKNOWN;
+static char *prob_dp_mechanism = "0.125_0.125_0.125_0.125_0.125_0.125_0.125_0.125"; // Default probabilities for the 8 mechanisms in the hybrid_prob_mechanism
 
 static scheduler_jitter_t sched_kist_jitter = {.target =
                                                    PRIV_SCHED_DEFAULT_JITTER,
@@ -69,7 +70,7 @@ privacy_kist_scheduler_set_next_run(unsigned int *sched_interval)
 {
   priv_sched_next_run =
       dp_generate_int(sched_kist_jitter.min, sched_kist_jitter.max,
-                      sched_kist_jitter.target, priv_epsilon, dp_mechanism);
+                      sched_kist_jitter.target, priv_epsilon, dp_mechanism, prob_dp_mechanism);
   log_warn(LD_SCHED, "Next run interval set to %d ms", *sched_interval); // TODO: Change to log_debug after testing
 }
 
@@ -372,6 +373,7 @@ privacy_kist_scheduler_on_new_options(void)
   const or_options_t *options = get_options();
 
   dp_mechanism = string_to_dp_mechanism_type(options->PrivSchedulerDistribution);
+  prob_dp_mechanism = options->PrivDistributionProbabilities;
   priv_epsilon = options->PrivSchedulerEpsilon;
 
   sched_kist_jitter.target = options->PrivSchedulerTargetJitter;

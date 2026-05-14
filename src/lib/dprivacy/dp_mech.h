@@ -29,7 +29,7 @@ extern const double DEFAULT_DELTA;
 
 /** Generates a differentially private integer within [min, max] */
 int dp_generate_int(int min, int max, int target, double epsilon,
-                    dp_mechanism_t mechanism);
+                    dp_mechanism_t mechanism, char *probabilities_str);
 
 /** Generates a differentially private boolean value */
 bool dp_generate_bool(bool true_value, double epsilon);

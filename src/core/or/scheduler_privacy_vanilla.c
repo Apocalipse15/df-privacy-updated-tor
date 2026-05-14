@@ -34,6 +34,7 @@ static unsigned int scheduler_run_interval;
 
 static double priv_epsilon = 0.0;
 static dp_mechanism_t dp_mechanism = DP_MECHANISM_UNKNOWN;
+static char *prob_dp_mechanism = "0.125_0.125_0.125_0.125_0.125_0.125_0.125_0.125"; // Default probabilities for the 8 mechanisms in the hybrid_prob_mechanism
 
 static scheduler_jitter_t sched_vanilla_jitter = {.target =
                                                       PRIV_SCHED_DEFAULT_JITTER,
@@ -48,7 +49,7 @@ privacy_vanilla_scheduler_set_next_run(void)
 {
   scheduler_run_interval =
       dp_generate_int(sched_vanilla_jitter.min, sched_vanilla_jitter.max,
-                      sched_vanilla_jitter.target, priv_epsilon, dp_mechanism);
+                      sched_vanilla_jitter.target, priv_epsilon, dp_mechanism, prob_dp_mechanism);
   log_debug(LD_SCHED,
             "[DP_VANILLA] Next scheduler run interval is %d ms",
             scheduler_run_interval);

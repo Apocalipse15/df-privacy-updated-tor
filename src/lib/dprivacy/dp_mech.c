@@ -38,6 +38,8 @@ const double DEFAULT_DELTA =
     1e-5; /** < Default delta for DP mechanisms, used in Normal mechanism */
 
 static unsigned int last_used_mechanism = DP_MECHANISM_UNKNOWN;
+static double probabilities[8];
+static bool probabilities_initialized = false;
 
 dp_mechanism_t
 string_to_dp_mechanism_type(char *mechanism_str)
@@ -120,7 +122,7 @@ dp_generate_bool(bool true_value, double epsilon)
 
 int
 dp_generate_int(int min, int max, int target, double epsilon,
-                dp_mechanism_t mechanism)
+                dp_mechanism_t mechanism, char *probabilities_str)
 {
   if (min > max) {
     log_warn(LD_BUG, "Invalid range: min (%d) > max (%d)", min, max);
@@ -150,8 +152,7 @@ dp_generate_int(int min, int max, int target, double epsilon,
   case DP_HYBRID_MECHANISM:
     return hybrid_mechanism_all_mechanisms(epsilon, target, min, max);
   case DP_MECHANISM_HYBRID_PROB:
-    log_warn(LD_BUG, "HYBRID_PROB mechanism is not implemented yet. Defaulting to HYBRID.");
-    return hybrid_mechanism_all_mechanisms(epsilon, target, min, max);
+    return hybrid_prob_mechanism(epsilon, target, min, max, probabilities_str);
   case DP_MECHANISM_UNKNOWN:
   default:
     log_warn(LD_BUG,
@@ -173,14 +174,56 @@ static int hybrid_mechanism_all_mechanisms(double epsilon, int target, int lower
     last_used_mechanism = (dp_mechanism_t)(rand() % total_number_of_mechanisms);
   }
 
-  return dp_generate_int(lower, upper, target, epsilon, last_used_mechanism);
+  return dp_generate_int(lower, upper, target, epsilon, last_used_mechanism, NULL);
 }
 
 static int hybrid_prob_mechanism(double epsilon, int target, int lower, int upper,
                                 char *probabilities_str) {
 
-  log_warn(LD_BUG, "HYBRID_PROB mechanism is not implemented yet. Defaulting to HYBRID.");
-  return hybrid_mechanism_all_mechanisms(epsilon, target, lower, upper);
+  log_warn(LD_SCHED, "Raw Probs: %s", probabilities_str);
+
+
+  if (!probabilities_initialized) {
+    int total_number_of_mechanisms = 8;
+    double sum = 0.0;
+
+    char buffer[strlen(probabilities_str) + 1];
+    strcpy(buffer, probabilities_str);
+
+    char *token = strtok(buffer, "_");
+
+    int i = 0;
+
+    while (token != NULL && i < total_number_of_mechanisms) {
+        log_warn(LD_SCHED, "Token__: %s", token);
+
+        probabilities[i] = atof(token);
+
+        sum += probabilities[i];
+
+        i++;
+
+        token = strtok(NULL, "_");
+    }
+}
+
+  log_warn(LD_SCHED, "probabilities. Probabilities: %f %f %f %f %f %f %f %f", probabilities[0], probabilities[1], probabilities[2], probabilities[3], probabilities[4], probabilities[5], probabilities[6], probabilities[7]);
+  
+  double r = uniform(); 
+  double cumulative = 0.0;
+  int selected_mechanism = 0;
+  for (int i = 0; i < 8; i++) {
+    cumulative += probabilities[i];
+    log_warn(LD_SCHED, "Mechanism: %s, Probability: %f, Cumulative: %f", dp_mechanism_type_to_string((dp_mechanism_t)i), probabilities[i], cumulative);
+    if (r <= cumulative) {
+      selected_mechanism = i;
+      break;
+    }
+  }
+
+  log_warn(LD_SCHED, "Using Hybrid Prob mechanism. Randomly selecting a mechanism for this run based on probabilities.  Mechanism: %s", dp_mechanism_type_to_string(selected_mechanism));
+                                  
+  return dp_generate_int(lower, upper, target, epsilon, selected_mechanism, probabilities_str);
 }
 
 static int
