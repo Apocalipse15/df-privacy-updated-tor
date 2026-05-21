@@ -169,7 +169,7 @@ dp_generate_int(int min, int max, int target, double epsilon,
  ******************************************************************/
 static int hybrid_mechanism_all_mechanisms(double epsilon, int target, int lower, int upper) {
   int total_number_of_mechanisms = 8; // TODO: See a way to automate this once
-  log_warn(LD_SCHED, "Using Hybrid mechanism. Randomly selecting a mechanism for this run. Last Mechanism: %s", dp_mechanism_type_to_string(last_used_mechanism));
+  log_debug(LD_SCHED, "Using Hybrid mechanism. Randomly selecting a mechanism for this run. Last Mechanism: %s", dp_mechanism_type_to_string(last_used_mechanism));
   if(last_used_mechanism == DP_MECHANISM_UNKNOWN || randomized_response(true, epsilon)) {
     last_used_mechanism = (dp_mechanism_t)(rand() % total_number_of_mechanisms);
   }
@@ -180,7 +180,7 @@ static int hybrid_mechanism_all_mechanisms(double epsilon, int target, int lower
 static int hybrid_prob_mechanism(double epsilon, int target, int lower, int upper,
                                 char *probabilities_str) {
 
-  log_warn(LD_SCHED, "Raw Probs: %s", probabilities_str);
+  log_debug(LD_SCHED, "Raw Probs: %s", probabilities_str);
 
 
   if (!probabilities_initialized) {
@@ -195,8 +195,6 @@ static int hybrid_prob_mechanism(double epsilon, int target, int lower, int uppe
     int i = 0;
 
     while (token != NULL && i < total_number_of_mechanisms) {
-        log_warn(LD_SCHED, "Token__: %s", token);
-
         probabilities[i] = atof(token);
 
         sum += probabilities[i];
@@ -205,23 +203,24 @@ static int hybrid_prob_mechanism(double epsilon, int target, int lower, int uppe
 
         token = strtok(NULL, "_");
     }
+    probabilities_initialized = true;
 }
 
-  log_warn(LD_SCHED, "probabilities. Probabilities: %f %f %f %f %f %f %f %f", probabilities[0], probabilities[1], probabilities[2], probabilities[3], probabilities[4], probabilities[5], probabilities[6], probabilities[7]);
+  log_debug(LD_SCHED, "probabilities. Probabilities: %f %f %f %f %f %f %f %f", probabilities[0], probabilities[1], probabilities[2], probabilities[3], probabilities[4], probabilities[5], probabilities[6], probabilities[7]);
   
   double r = uniform(); 
   double cumulative = 0.0;
   int selected_mechanism = 0;
   for (int i = 0; i < 8; i++) {
     cumulative += probabilities[i];
-    log_warn(LD_SCHED, "Mechanism: %s, Probability: %f, Cumulative: %f", dp_mechanism_type_to_string((dp_mechanism_t)i), probabilities[i], cumulative);
+    log_debug(LD_SCHED, "Mechanism: %s, Probability: %f, Cumulative: %f", dp_mechanism_type_to_string((dp_mechanism_t)i), probabilities[i], cumulative);
     if (r <= cumulative) {
       selected_mechanism = i;
       break;
     }
   }
 
-  log_warn(LD_SCHED, "Using Hybrid Prob mechanism. Randomly selecting a mechanism for this run based on probabilities.  Mechanism: %s", dp_mechanism_type_to_string(selected_mechanism));
+  log_debug(LD_SCHED, "Using Hybrid Prob mechanism. Randomly selecting a mechanism for this run based on probabilities.  Mechanism: %s", dp_mechanism_type_to_string(selected_mechanism));
                                   
   return dp_generate_int(lower, upper, target, epsilon, selected_mechanism, probabilities_str);
 }
@@ -269,7 +268,7 @@ pareto_mechanism(double epsilon, int target, int lower, int upper){
 
     int result = target + (int)round(pareto_sample);
 
-    log_warn(LD_SCHED, "Pareto mechanism generated noise: %f", pareto_sample); // TODO: Change to log_debug after testing
+    log_debug(LD_SCHED, "Pareto mechanism generated noise: %f", pareto_sample); // TODO: Change to log_debug after testing
 
     /* clamp manually */
     if (result < lower) result = lower;
