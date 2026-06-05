@@ -2,19 +2,9 @@
 /* See LICENSE for licensing information */
 
 /**
- * @file scheduler_privacy_vanilla.c
+ * @file scheduler_up_privacy_vanilla.c
  * @brief Differential Private Implementation of Vanilla Scheduler
  *
- * PRIV-Vanilla Scheduler is an extension of the Vanilla Scheduler
- * (scheduler_vanilla) where jitter may be applied based on mathematical
- * distributions. This way, traffic analysis and correlation gets harder to
- * deanonimyze users' information.addressmap_entry_source_bitfield_t
- *
- * This solutions gives total control over to the host of the relay, with a
- * fully customizable implementation. The host may set the targetted jitter,
- * the interval of accepted jitter inserted by the scheduler. Also, the host
- * can choose the mathematical distribuition and the value of epsilon. 
- * The higher the epsilon, more jitter is applyed.
  **/
 
 #include "core/or/or.h"
@@ -51,7 +41,7 @@ static scheduler_jitter_t sched_vanilla_jitter = {.target =
  * Sets the run_interval based on a differential private algorithm.
  */
 static void
-privacy_vanilla_scheduler_set_next_run(void)
+privacy_up_vanilla_scheduler_set_next_run(void)
 {
   scheduler_run_interval =
       dp_generate_int(sched_vanilla_jitter.min, sched_vanilla_jitter.max,
@@ -85,7 +75,7 @@ have_work(void)
 
 
 static void 
-privacy_vanilla_scheduler_on_new_options(void)
+privacy_up_vanilla_scheduler_on_new_options(void)
 {
   const or_options_t *options = get_options();
 
@@ -105,21 +95,59 @@ privacy_vanilla_scheduler_on_new_options(void)
             sched_vanilla_jitter.min);
 }
 
+// TODO: maybe remove this and add to new scheduler 
 static void
-privacy_vanilla_scheduler_init(void)
+privacy_up_vanilla_scheduler_send_dummy_cells(void)
+{
+  log_warn(LD_SCHED, "LOG HERE");
+  smartlist_t *cp = get_channels_pending();
+
+  if (smartlist_len(cp) == 0) {
+    log_warn(LD_SCHED, "[DP_VANILLA] No pending channels to send dummy cells to.");
+    //TODO: force jitter???
+    return;
+  }
+  log_warn(LD_SCHED, "[DP_VANILLA] Sending dummy cells to %d pending channels.", smartlist_len(cp));
+
+  SMARTLIST_FOREACH_BEGIN(cp, channel_t *, chan) {
+    tor_addr_t remote_addr;
+    channel_get_addr_if_possible(chan, &remote_addr);
+    
+    log_warn(LD_SCHED,
+        "Channel %" PRIu64 " at %p | state=%s | dir=%s | client=%s | remote_addr=%s",
+        chan->global_identifier,
+        chan,
+        get_scheduler_state_string(chan->scheduler_state),
+        chan->is_incoming ? "incoming" : "outgoing",
+        chan->is_client ? "client" : "server",
+        tor_addr_to_str(&remote_addr)
+
+        
+    );
+  } SMARTLIST_FOREACH_END(chan);
+
+  /*channel_tls_connect(const tor_addr_t *addr, uint16_t port,
+                    const char *id_digest,
+                    const ed25519_public_key_t *ed_id)*/
+}
+
+static void
+privacy_up_vanilla_scheduler_init(void)
 {
   monotime_get(&scheduler_last_run);
-  privacy_vanilla_scheduler_on_new_options();
-  privacy_vanilla_scheduler_set_next_run();
+  privacy_up_vanilla_scheduler_on_new_options();
+  privacy_up_vanilla_scheduler_set_next_run();
 }
 
 /** Re-trigger the scheduler in a way safe to use from the callback */
 static void
-privacy_vanilla_scheduler_schedule(void)
+privacy_up_vanilla_scheduler_schedule(void)
 {           
   struct monotime_t now;
   struct timeval next_run;
   int64_t diff;
+
+  privacy_up_vanilla_scheduler_send_dummy_cells();
 
   if (!have_work()) {    
     return;
@@ -139,12 +167,12 @@ privacy_vanilla_scheduler_schedule(void)
     scheduler_ev_active();
   }
   scheduler_last_run = now;
-  privacy_vanilla_scheduler_set_next_run();
+  privacy_up_vanilla_scheduler_set_next_run();
 }
 
 
 static void
-privacy_vanilla_scheduler_run(void)
+privacy_up_vanilla_scheduler_run(void)
 {
   int n_cells, n_chans_before, n_chans_after;
   ssize_t flushed, flushed_this_time;
@@ -256,19 +284,19 @@ privacy_vanilla_scheduler_run(void)
 }
 
 /* Stores the vanilla scheduler function pointers. */
-static scheduler_t privacy_vanilla_scheduler = {
-  .type = SCHEDULER_PRIV_VANILLA,
+static scheduler_t privacy_up_vanilla_scheduler = {
+  .type = SCHEDULER_UP_PRIV_VANILLA,
   .free_all = NULL,
   .on_channel_free = NULL,
-  .init = privacy_vanilla_scheduler_init,
+  .init = privacy_up_vanilla_scheduler_init,
   .on_new_consensus = NULL,
-  .schedule = privacy_vanilla_scheduler_schedule,
-  .run = privacy_vanilla_scheduler_run,
-  .on_new_options = privacy_vanilla_scheduler_on_new_options,
+  .schedule = privacy_up_vanilla_scheduler_schedule,
+  .run = privacy_up_vanilla_scheduler_run,
+  .on_new_options = privacy_up_vanilla_scheduler_on_new_options,
 };
 
 scheduler_t *
-get_privacy_vanilla_scheduler(void)
+get_privacy_up_vanilla_scheduler(void)
 {
-  return &privacy_vanilla_scheduler;
+  return &privacy_up_vanilla_scheduler;
 }

@@ -23,6 +23,8 @@ typedef enum {
   SCHEDULER_KIST_LITE = 3,
   SCHEDULER_PRIV_VANILLA = 4,
   SCHEDULER_PRIV_KIST = 5,
+  SCHEDULER_UP_PRIV_VANILLA = 6,
+  SCHEDULER_UP_PRIV_KIST = 7,
 } scheduler_types_t;
 
 /**
@@ -246,5 +248,15 @@ scheduler_t *get_privacy_vanilla_scheduler(void);
  * Defined in scheduler_privacy_kist.c
  *********************************/
 scheduler_t *get_privacy_kist_scheduler(void);
+
+/*********************************
+ * Defined in scheduler_up_privacy_vanilla.c
+ *********************************/
+scheduler_t *get_privacy_up_vanilla_scheduler(void);
+
+/*********************************
+ * Defined in scheduler_up_privacy_kist.c
+ *********************************/
+scheduler_t *get_privacy_up_kist_scheduler(void);
 
 #endif /* !defined(TOR_SCHEDULER_H) */

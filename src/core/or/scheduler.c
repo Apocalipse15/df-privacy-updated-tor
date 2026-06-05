@@ -194,6 +194,10 @@ get_scheduler_type_string(scheduler_types_t type)
     return "PRIV_Vanilla";
   case SCHEDULER_PRIV_KIST:
     return "PRIV_KIST";
+  case SCHEDULER_UP_PRIV_VANILLA:
+    return "UP_PRIV_Vanilla";
+  case SCHEDULER_UP_PRIV_KIST:
+    return "UP_PRIV_KIST";
   case SCHEDULER_NONE:
     FALLTHROUGH;
   default:
@@ -295,6 +299,12 @@ select_scheduler(void)
       goto end;
     case SCHEDULER_PRIV_KIST:
       new_scheduler = get_privacy_kist_scheduler();
+      goto end;
+    case SCHEDULER_UP_PRIV_VANILLA:
+      new_scheduler = get_privacy_up_vanilla_scheduler();
+      goto end;
+    case SCHEDULER_UP_PRIV_KIST:
+      new_scheduler = get_privacy_up_kist_scheduler();
       goto end;
     case SCHEDULER_NONE:
       FALLTHROUGH;

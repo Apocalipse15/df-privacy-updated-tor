@@ -3122,7 +3122,16 @@ options_validate_scheduler(or_options_t *options, char **msg)
       sched_type = tor_malloc_zero(sizeof(int));
       *sched_type = SCHEDULER_PRIV_KIST;
       smartlist_add(options->SchedulerTypes_, sched_type);
-    } else {
+    } else if (!strcasecmp("UP_PRIV_Vanilla", type)) {
+      sched_type = tor_malloc_zero(sizeof(int));
+      *sched_type = SCHEDULER_UP_PRIV_VANILLA;
+      smartlist_add(options->SchedulerTypes_, sched_type);
+    } else if (!strcasecmp("UP_PRIV_Kist", type)) {
+      sched_type = tor_malloc_zero(sizeof(int));
+      *sched_type = SCHEDULER_UP_PRIV_KIST;
+      smartlist_add(options->SchedulerTypes_, sched_type);
+    }   
+    else {
       tor_asprintf(msg, "Unknown type %s in option Schedulers. "
                         "Possible values are KIST, KISTLite and Vanilla.",
                    escaped(type));

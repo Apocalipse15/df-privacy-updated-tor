@@ -35,6 +35,8 @@ LIBTOR_APP_A_SOURCES += 				\
 	src/core/or/scheduler_vanilla.c		\
 	src/core/or/scheduler_privacy_vanilla.c		\
 	src/core/or/scheduler_privacy_kist.c		\
+	src/core/or/scheduler_up_privacy_kist.c		\
+	src/core/or/scheduler_up_privacy_vanilla.c	\
 	src/core/or/sendme.c			\
 	src/core/or/congestion_control_common.c			\
 	src/core/or/congestion_control_vegas.c			\
