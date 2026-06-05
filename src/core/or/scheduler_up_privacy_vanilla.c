@@ -13,6 +13,13 @@
 #include "core/or/channel.h"
 #define SCHEDULER_PRIVATE
 #include "core/or/scheduler.h"
+#include "feature/nodelist/nodelist.h"
+#include "feature/nodelist/node_select.h"
+#include "core/or/extend_info_st.h"
+#include "core/or/extendinfo.h"
+#include "core/or/cell_st.h"                
+#include "lib/crypt_ops/crypto_rand.h"       
+#include "core/or/channeltls.h"          
 
 #include "lib/dprivacy/dp_mech.h"
 
@@ -26,10 +33,8 @@ static double priv_epsilon = 0.0;
 static dp_mechanism_t dp_mechanism = DP_MECHANISM_UNKNOWN;
 static char *prob_dp_mechanism = "0.125_0.125_0.125_0.125_0.125_0.125_0.125_0.125"; // Default probabilities for the 8 mechanisms in the hybrid_prob_mechanism
 
-// maybe remove or fuse
-//static monotime_t time_since_idle;
-//static monotime_t time_since_waiting_for_cells;
-//static monotime_t time_since_last_check;
+/** Channels we manually opened for dummy cell injection */
+static smartlist_t *dp_created_channels = NULL;
 
 
 static scheduler_jitter_t sched_vanilla_jitter = {.target =
@@ -104,28 +109,96 @@ privacy_up_vanilla_scheduler_send_dummy_cells(void)
 
   if (smartlist_len(cp) == 0) {
     log_warn(LD_SCHED, "[DP_VANILLA] No pending channels to send dummy cells to.");
-    //TODO: force jitter???
-    return;
   }
   log_warn(LD_SCHED, "[DP_VANILLA] Sending dummy cells to %d pending channels.", smartlist_len(cp));
 
+  if (dp_created_channels) {
+    SMARTLIST_FOREACH_BEGIN(dp_created_channels, channel_t *, dc) {
+        if (dc->state == CHANNEL_STATE_OPEN) {
+            /* Send dummy cell */
+            cell_t dummy;
+            memset(&dummy, 0, sizeof(cell_t));
+            dummy.command = CELL_DUMMY;
+            dummy.circ_id = 0;
+            crypto_fast_rng_getbytes(get_thread_fast_rng(),
+                                     dummy.payload,
+                                     sizeof(dummy.payload));
+
+            if (dc->write_cell) {
+                dc->write_cell(dc, &dummy);
+                log_warn(LD_SCHED, "[DP] Sent CELL_DUMMY on created channel "
+                                   "%" PRIu64, dc->global_identifier);
+            }
+
+            /* Mark for close after sending */
+            channel_mark_for_close(dc);
+            log_warn(LD_SCHED, "[DP] Marked created channel %" PRIu64
+                               " for close", dc->global_identifier);
+
+        } else if (dc->state == CHANNEL_STATE_CLOSING ||
+                   dc->state == CHANNEL_STATE_CLOSED  ||
+                   dc->state == CHANNEL_STATE_ERROR) {
+            /* Already closing/closed, just remove from our list */
+            log_warn(LD_SCHED, "[DP] Created channel %" PRIu64
+                               " already closing/closed, removing.",
+                               dc->global_identifier);
+        } else {
+            /* Still connecting, leave it for next iteration */
+            log_warn(LD_SCHED, "[DP] Created channel %" PRIu64
+                               " still not open (state=%d), will retry.",
+                               dc->global_identifier, dc->state);
+        }
+    } SMARTLIST_FOREACH_END(dc);
+
+    smartlist_clear(dp_created_channels);
+  }
+
   SMARTLIST_FOREACH_BEGIN(cp, channel_t *, chan) {
     tor_addr_t remote_addr;
-    channel_get_addr_if_possible(chan, &remote_addr);
-    
-    log_warn(LD_SCHED,
-        "Channel %" PRIu64 " at %p | state=%s | dir=%s | client=%s | remote_addr=%s",
-        chan->global_identifier,
-        chan,
-        get_scheduler_state_string(chan->scheduler_state),
-        chan->is_incoming ? "incoming" : "outgoing",
-        chan->is_client ? "client" : "server",
-        tor_addr_to_str(&remote_addr)
+    char addr_buf[TOR_ADDR_BUF_LEN];
 
-        
+    if (!channel_get_addr_if_possible(chan, &remote_addr)) {
+        strlcpy(addr_buf, "<no address>", sizeof(addr_buf));
+        continue;
+    }
+    tor_addr_to_str(addr_buf, &remote_addr, sizeof(addr_buf), 0);
+
+    if (!chan->is_incoming || chan->state != CHANNEL_STATE_OPEN)
+        continue;
+
+    const node_t *node = node_get_by_id(chan->identity_digest);
+    if (!node) continue;
+
+    extend_info_t *ei = extend_info_from_node(node, 1, 0);
+    if (!ei) continue;
+
+    const ed25519_public_key_t *ed_id =
+        ed25519_public_key_is_zero(&chan->ed25519_identity)
+            ? NULL : &chan->ed25519_identity;
+
+    channel_t *new_chan = channel_tls_connect(
+        &ei->orports[0].addr,
+        ei->orports[0].port,
+        chan->identity_digest,
+        ed_id
     );
-  } SMARTLIST_FOREACH_END(chan);
+    extend_info_free(ei);
 
+    if (!new_chan) {
+        log_warn(LD_SCHED, "[DP] Failed to open channel to %s", addr_buf);
+        continue;
+    }
+
+    /* Track it for next iteration */
+    smartlist_add(dp_created_channels, new_chan);
+    log_warn(LD_SCHED, "[DP] Created channel %" PRIu64 " to %s, "
+                       "will send dummy next iteration.",
+             new_chan->global_identifier, addr_buf);
+
+} SMARTLIST_FOREACH_END(chan);
+      
+
+  
   /*channel_tls_connect(const tor_addr_t *addr, uint16_t port,
                     const char *id_digest,
                     const ed25519_public_key_t *ed_id)*/
@@ -134,6 +207,9 @@ privacy_up_vanilla_scheduler_send_dummy_cells(void)
 static void
 privacy_up_vanilla_scheduler_init(void)
 {
+  if (!dp_created_channels) {
+    dp_created_channels = smartlist_new();
+  }
   monotime_get(&scheduler_last_run);
   privacy_up_vanilla_scheduler_on_new_options();
   privacy_up_vanilla_scheduler_set_next_run();
