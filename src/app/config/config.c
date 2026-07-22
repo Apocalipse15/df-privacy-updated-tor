@@ -679,6 +679,10 @@ static const config_var_t option_vars_[] = {
     V(PrivSchedulerEpsilon, DOUBLE, "-1.0"),
     V(PrivDistributionProbabilities, STRING, "0.14_0.14_0.14_0.14_0.14_0.14_0.14"),
 
+    V(PrivFakeChannelDistribution, STRING, "UNIFORM"),
+    V(PrivFakeChannelEpsilon, DOUBLE, "-1.0"),
+    V(PrivFakeChannelProbabilities, STRING, "0.14_0.14_0.14_0.14_0.14_0.14_0.14"),
+
     /** Jitter Oriented Differential Private Scheduler Configurations  */
 
     V(PrivSchedulerMinJitter, POSINT, "1"),
@@ -3203,6 +3207,35 @@ options_validate_scheduler(or_options_t *options, char **msg)
     REJECT("PrivSchedulerTargetJitter must be between "
            "PrivSchedulerMinJitter and PrivSchedulerMaxJitter");
   }
+
+  if (strcasecmp(options->PrivFakeChannelDistribution, "NORMAL") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "UNIFORM") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "POISSON") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "LAPLACE") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "PARETO") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "BERNOULLI") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "RANDOMIZED_RESPONSE") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "HYBRID") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "HYBRID_PROB") &&
+      strcasecmp(options->PrivFakeChannelDistribution, "EXPONENTIAL")) {
+    tor_asprintf(
+        msg,
+        "PrivFakeChannelDistribution must be either LAPLACE, NORMAL, UNIFORM, POISSON, PARETO, BERNOULLI, HYBRID, RANDOMIZED_RESPONSE or "
+        "EXPONENTIAL, not %s",
+        options->PrivFakeChannelDistribution);
+    return -1;
+  }
+
+  if (options->PrivFakeChannelEpsilon < 0) {
+    tor_asprintf(msg,
+                 "PrivFakeChannelEpsilon is disabled. It must be greater or "
+                 "equal to 0 to enable Jitter Features");
+  } else if (options->PrivFakeChannelEpsilon > 10) {
+    tor_asprintf(msg, "PrivFakeChannelEpsilon is greater than 10. It will "
+                      "generate close to none Jitter Conditions!");
+  }
+
+  if(options)
 
   return 0;
 }

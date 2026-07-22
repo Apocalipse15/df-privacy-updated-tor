@@ -1115,6 +1115,15 @@ struct or_options_t {
   /** Differential Private Packet Padding Cells Generation Configs */
   double DummyCellEpsilon;
 
+  /** Fake Channel Differential Privacy Configuration */
+  char *PrivFakeChannelDistribution;
+  double PrivFakeChannelEpsilon;
+  char *PrivFakeChannelProbabilities; /**< A comma-separated list of probabilities for each distribution in PrivFakeChannels. */
+
+  int PrivFakeChannelTargetJitter;
+  int PrivFakeChannelMaxJitter;
+  int PrivFakeChannelMinJitter;
+
   /**
    * Configuration objects for individual modules.
    *

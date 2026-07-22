@@ -33,6 +33,11 @@ static double priv_epsilon = 0.0;
 static dp_mechanism_t dp_mechanism = DP_MECHANISM_UNKNOWN;
 static char *prob_dp_mechanism = "0.125_0.125_0.125_0.125_0.125_0.125_0.125_0.125"; // Default probabilities for the 8 mechanisms in the hybrid_prob_mechanism
 
+static double fake_priv_epsilon = 0.0;
+static dp_mechanism_t fake_dp_mechanism = DP_MECHANISM_UNKNOWN;
+static char *fake_prob_dp_mechanism = "0.125_0.125_0.125_0.125_0.125_0.125_0.125_0.125"; // Default probabilities for the 8 mechanisms in the hybrid_prob_mechanism
+
+
 /** Channels we manually opened for dummy cell injection */
 static smartlist_t *dp_created_channels = NULL;
 
@@ -41,6 +46,11 @@ static scheduler_jitter_t sched_vanilla_jitter = {.target =
                                                       PRIV_SCHED_DEFAULT_JITTER,
                                                   .max = PRIV_SCHED_MAX_JITTER,
                                                   .min = PRIV_SCHED_MIN_JITTER};
+
+static scheduler_jitter_t sched_fake_jitter = {.target =
+                                                      PRIV_SCHED_DEFAULT_JITTER,
+                                                  .max = PRIV_SCHED_MAX_JITTER,
+                                                  .min = PRIV_SCHED_MIN_JITTER};                                                
 
 /**
  * Sets the run_interval based on a differential private algorithm.
@@ -92,6 +102,13 @@ privacy_up_vanilla_scheduler_on_new_options(void)
   sched_vanilla_jitter.min = options->PrivSchedulerMinJitter;
   prob_dp_mechanism = options->PrivDistributionProbabilities;
 
+  fake_dp_mechanism = string_to_dp_mechanism_type(options->PrivFakeChannelDistribution);
+  fake_priv_epsilon = options->PrivFakeChannelEpsilon;
+  fake_prob_dp_mechanism = options->PrivFakeChannelProbabilities;
+  sched_fake_jitter.target = options->PrivFakeChannelTargetJitter;
+  sched_fake_jitter.max = options->PrivFakeChannelMaxJitter;
+  sched_fake_jitter.min = options->PrivFakeChannelMinJitter;
+
   log_debug(LD_SCHED,
             "[PRIV_VANILLA] Scheduler distribution: %s, epsilon: %.2f, "
             "jitter target: %d, max: %d, min: %d",
@@ -100,7 +117,6 @@ privacy_up_vanilla_scheduler_on_new_options(void)
             sched_vanilla_jitter.min);
 }
 
-// TODO: maybe remove this and add to new scheduler 
 static void
 privacy_up_vanilla_scheduler_send_dummy_cells(void)
 {
@@ -114,46 +130,46 @@ privacy_up_vanilla_scheduler_send_dummy_cells(void)
 
   if (dp_created_channels) {
     SMARTLIST_FOREACH_BEGIN(dp_created_channels, channel_t *, dc) {
-        if (dc->state == CHANNEL_STATE_OPEN) {
-            /* Send dummy cell */
-            cell_t dummy;
-            memset(&dummy, 0, sizeof(cell_t));
-            dummy.command = CELL_DUMMY;
-            dummy.circ_id = 0;
-            crypto_fast_rng_getbytes(get_thread_fast_rng(),
-                                     dummy.payload,
-                                     sizeof(dummy.payload));
+      if (dc->state == CHANNEL_STATE_OPEN) {
+        int cells_to_send = dp_generate_int(sched_fake_jitter.min, sched_fake_jitter.max,
+                    sched_fake_jitter.target, fake_priv_epsilon, fake_dp_mechanism, fake_prob_dp_mechanism);
+        
+        log_warn(LD_SCHED, "[DP] Sending %d dummy cells on created channel %" PRIu64, cells_to_send, dc->global_identifier);
 
-            if (dc->write_cell) {
-                dc->write_cell(dc, &dummy);
-                log_warn(LD_SCHED, "[DP] Sent CELL_DUMMY on created channel "
-                                   "%" PRIu64, dc->global_identifier);
-            }
+        for (int i = 0; i < cells_to_send; i++) {
+          /* Send dummy cell */
+          cell_t dummy;
+          memset(&dummy, 0, sizeof(cell_t));
+          dummy.command = CELL_DUMMY;
+          dummy.circ_id = 0;
+          crypto_fast_rng_getbytes(get_thread_fast_rng(),
+                                  dummy.payload,
+                                  sizeof(dummy.payload));
 
-            /* Mark for close after sending */
+          if (dc->write_cell) {
+              dc->write_cell(dc, &dummy);
+              log_warn(LD_SCHED, "[DP] Sent CELL_DUMMY on created channel "
+                                "%" PRIu64, dc->global_identifier);
+          }
+        }
+        /* Mark for close after sending */
             channel_mark_for_close(dc);
             log_warn(LD_SCHED, "[DP] Marked created channel %" PRIu64
-                               " for close", dc->global_identifier);
-
-        } else if (dc->state == CHANNEL_STATE_CLOSING ||
-                   dc->state == CHANNEL_STATE_CLOSED  ||
-                   dc->state == CHANNEL_STATE_ERROR) {
-            /* Already closing/closed, just remove from our list */
-            log_warn(LD_SCHED, "[DP] Created channel %" PRIu64
-                               " already closing/closed, removing.",
-                               dc->global_identifier);
-        } else {
-            /* Still connecting, leave it for next iteration */
-            log_warn(LD_SCHED, "[DP] Created channel %" PRIu64
-                               " still not open (state=%d), will retry.",
-                               dc->global_identifier, dc->state);
+                              " for close", dc->global_identifier);
         }
     } SMARTLIST_FOREACH_END(dc);
 
     smartlist_clear(dp_created_channels);
   }
+  
 
   SMARTLIST_FOREACH_BEGIN(cp, channel_t *, chan) {
+    if(dp_generate_bool(true, fake_priv_epsilon)) {
+      log_warn(LD_SCHED, "[DP] Decided to create a new channel for dummy cell injection.");
+    } else {
+      log_warn(LD_SCHED, "[DP] Decided NOT to create a new channel for dummy cell injection.");
+      continue;
+    }
     tor_addr_t remote_addr;
     char addr_buf[TOR_ADDR_BUF_LEN];
 
@@ -195,10 +211,8 @@ privacy_up_vanilla_scheduler_send_dummy_cells(void)
                        "will send dummy next iteration.",
              new_chan->global_identifier, addr_buf);
 
-} SMARTLIST_FOREACH_END(chan);
-      
+  } SMARTLIST_FOREACH_END(chan);
 
-  
   /*channel_tls_connect(const tor_addr_t *addr, uint16_t port,
                     const char *id_digest,
                     const ed25519_public_key_t *ed_id)*/
