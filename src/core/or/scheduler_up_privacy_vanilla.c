@@ -128,6 +128,10 @@ privacy_up_vanilla_scheduler_send_dummy_cells(void)
   }
   log_warn(LD_SCHED, "[DP_VANILLA] Sending dummy cells to %d pending channels.", smartlist_len(cp));
 
+  int max_channels_to_create = dp_generate_int(sched_fake_jitter.min, sched_fake_jitter.max,
+                      sched_fake_jitter.target, fake_priv_epsilon, fake_dp_mechanism, fake_prob_dp_mechanism);
+  log_warn(LD_SCHED, "[DP_VANILLA] Will create up to %d new channels for dummy cell injection.", max_channels_to_create);
+
   if (dp_created_channels) {
     SMARTLIST_FOREACH_BEGIN(dp_created_channels, channel_t *, dc) {
       if (dc->state == CHANNEL_STATE_OPEN) {
@@ -157,15 +161,15 @@ privacy_up_vanilla_scheduler_send_dummy_cells(void)
             log_warn(LD_SCHED, "[DP] Marked created channel %" PRIu64
                               " for close", dc->global_identifier);
         }
+        SMARTLIST_DEL_CURRENT(dp_created_channels, dc);
     } SMARTLIST_FOREACH_END(dc);
-
-    smartlist_clear(dp_created_channels);
   }
   
-
   SMARTLIST_FOREACH_BEGIN(cp, channel_t *, chan) {
-    if(dp_generate_bool(true, fake_priv_epsilon)) {
+    
+    if(max_channels_to_create > 0 && dp_generate_bool(true, fake_priv_epsilon)) {
       log_warn(LD_SCHED, "[DP] Decided to create a new channel for dummy cell injection.");
+      max_channels_to_create--;
     } else {
       log_warn(LD_SCHED, "[DP] Decided NOT to create a new channel for dummy cell injection.");
       continue;
