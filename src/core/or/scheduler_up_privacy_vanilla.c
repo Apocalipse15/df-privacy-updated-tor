@@ -160,8 +160,9 @@ privacy_up_vanilla_scheduler_send_dummy_cells(void)
             channel_mark_for_close(dc);
             log_warn(LD_SCHED, "[DP] Marked created channel %" PRIu64
                               " for close", dc->global_identifier);
+          SMARTLIST_DEL_CURRENT(dp_created_channels, dc);
         }
-        SMARTLIST_DEL_CURRENT(dp_created_channels, dc);
+        
     } SMARTLIST_FOREACH_END(dc);
   }
   
