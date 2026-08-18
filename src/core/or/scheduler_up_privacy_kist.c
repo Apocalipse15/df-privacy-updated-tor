@@ -31,8 +31,13 @@
 #define SCHEDULER_PRIVATE
 #include "core/or/scheduler.h"
 #include "lib/math/fp.h"
-
+#include "feature/nodelist/nodelist.h"
+#include "feature/nodelist/node_select.h"
+#include "core/or/extend_info_st.h"
+#include "core/or/extendinfo.h"
+#include "core/or/cell_st.h"       
 #include "core/or/or_connection_st.h"
+#include "lib/crypt_ops/crypto_rand.h"   
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
@@ -57,10 +62,23 @@ static double priv_epsilon = 0.0;
 static dp_mechanism_t dp_mechanism = DP_MECHANISM_UNKNOWN;
 static char *prob_dp_mechanism = "0.125_0.125_0.125_0.125_0.125_0.125_0.125_0.125"; // Default probabilities for the 8 mechanisms in the hybrid_prob_mechanism
 
+static double fake_priv_epsilon = 0.0;
+static dp_mechanism_t fake_dp_mechanism = DP_MECHANISM_UNKNOWN;
+static char *fake_prob_dp_mechanism = "0.125_0.125_0.125_0.125_0.125_0.125_0.125_0.125"; // Default probabilities for the 8 mechanisms in the hybrid_prob_mechanism
+
+
 static scheduler_jitter_t sched_kist_jitter = {.target =
                                                    PRIV_SCHED_DEFAULT_JITTER,
                                                .max = PRIV_SCHED_MAX_JITTER,
                                                .min = PRIV_SCHED_MIN_JITTER};
+
+/** Channels we manually opened for dummy cell injection */
+static smartlist_t *dp_created_channels = NULL;
+
+static scheduler_jitter_t sched_fake_jitter = {.target =
+                                                      PRIV_SCHED_DEFAULT_JITTER,
+                                                  .max = PRIV_SCHED_MAX_JITTER,
+                                                  .min = PRIV_SCHED_MIN_JITTER};                                                
 
 /**
  * Sets the run_interval based on a differential private algorithm.
@@ -380,6 +398,13 @@ privacy_up_kist_scheduler_on_new_options(void)
   sched_kist_jitter.max = options->PrivSchedulerMaxJitter;
   sched_kist_jitter.min = options->PrivSchedulerMinJitter;
 
+  fake_dp_mechanism = string_to_dp_mechanism_type(options->PrivFakeChannelDistribution);
+  fake_priv_epsilon = options->PrivFakeChannelEpsilon;
+  fake_prob_dp_mechanism = options->PrivFakeChannelProbabilities;
+  sched_fake_jitter.target = options->PrivFakeChannelTargetJitter;
+  sched_fake_jitter.max = options->PrivFakeChannelMaxJitter;
+  sched_fake_jitter.min = options->PrivFakeChannelMinJitter;
+
   log_debug(LD_SCHED,
             "[PRIV_KIST] Scheduler distribution: %s, epsilon: %.2f, "
             "jitter target: %d, max: %d, min: %d",
@@ -389,6 +414,112 @@ privacy_up_kist_scheduler_on_new_options(void)
 
   /* Calls kist_scheduler_run_interval which calls get_options(). */
   set_scheduler_run_interval();
+}
+
+static void
+privacy_up_kist_scheduler_send_dummy_cells(void)
+{
+  log_warn(LD_SCHED, "[DP_KIST] LOG HERE");
+  smartlist_t *cp = get_channels_pending();
+
+  if (smartlist_len(cp) == 0) {
+    log_warn(LD_SCHED, "[DP_KIST] No pending channels to send dummy cells to.");
+  }
+  log_warn(LD_SCHED, "[DP_KIST] Sending dummy cells to %d pending channels.", smartlist_len(cp));
+
+  int max_channels_to_create = dp_generate_int(sched_fake_jitter.min, sched_fake_jitter.max,
+                      sched_fake_jitter.target, fake_priv_epsilon, fake_dp_mechanism, fake_prob_dp_mechanism);
+  log_warn(LD_SCHED, "[DP_KIST] Will create up to %d new channels for dummy cell injection.", max_channels_to_create);
+
+  if (dp_created_channels) {
+    SMARTLIST_FOREACH_BEGIN(dp_created_channels, channel_t *, dc) {
+      if (dc->state == CHANNEL_STATE_OPEN) {
+        int cells_to_send = dp_generate_int(sched_fake_jitter.min, sched_fake_jitter.max,
+                    sched_fake_jitter.target, fake_priv_epsilon, fake_dp_mechanism, fake_prob_dp_mechanism);
+        
+        log_warn(LD_SCHED, "[DP_KIST] Sending %d dummy cells on created channel %" PRIu64, cells_to_send, dc->global_identifier);
+
+        for (int i = 0; i < cells_to_send; i++) {
+          /* Send dummy cell */
+          cell_t dummy;
+          memset(&dummy, 0, sizeof(cell_t));
+          dummy.command = CELL_DUMMY;
+          dummy.circ_id = 0;
+          crypto_fast_rng_getbytes(get_thread_fast_rng(),
+                                  dummy.payload,
+                                  sizeof(dummy.payload));
+
+          if (dc->write_cell) {
+              dc->write_cell(dc, &dummy);
+              log_warn(LD_SCHED, "[DP_KIST] Sent CELL_DUMMY on created channel "
+                                "%" PRIu64, dc->global_identifier);
+          }
+        }
+        /* Mark for close after sending */
+            channel_mark_for_close(dc);
+            log_warn(LD_SCHED, "[DP_KIST] Marked created channel %" PRIu64
+                              " for close", dc->global_identifier);
+          SMARTLIST_DEL_CURRENT(dp_created_channels, dc);
+        }
+        
+    } SMARTLIST_FOREACH_END(dc);
+  }
+  
+  SMARTLIST_FOREACH_BEGIN(cp, channel_t *, chan) {
+    
+    if(max_channels_to_create > 0 && dp_generate_bool(true, fake_priv_epsilon)) {
+      log_warn(LD_SCHED, "[DP_KIST] Decided to create a new channel for dummy cell injection.");
+      max_channels_to_create--;
+    } else {
+      log_warn(LD_SCHED, "[DP_KIST] Decided NOT to create a new channel for dummy cell injection.");
+      continue;
+    }
+    tor_addr_t remote_addr;
+    char addr_buf[TOR_ADDR_BUF_LEN];
+
+    if (!channel_get_addr_if_possible(chan, &remote_addr)) {
+        strlcpy(addr_buf, "<no address>", sizeof(addr_buf));
+        continue;
+    }
+    tor_addr_to_str(addr_buf, &remote_addr, sizeof(addr_buf), 0);
+
+    if (!chan->is_incoming || chan->state != CHANNEL_STATE_OPEN)
+        continue;
+
+    const node_t *node = node_get_by_id(chan->identity_digest);
+    if (!node) continue;
+
+    extend_info_t *ei = extend_info_from_node(node, 1, 0);
+    if (!ei) continue;
+
+    const ed25519_public_key_t *ed_id =
+        ed25519_public_key_is_zero(&chan->ed25519_identity)
+            ? NULL : &chan->ed25519_identity;
+
+    channel_t *new_chan = channel_tls_connect(
+        &ei->orports[0].addr,
+        ei->orports[0].port,
+        chan->identity_digest,
+        ed_id
+    );
+    extend_info_free(ei);
+
+    if (!new_chan) {
+        log_warn(LD_SCHED, "[DP_KIST] Failed to open channel to %s", addr_buf);
+        continue;
+    }
+
+    /* Track it for next iteration */
+    smartlist_add(dp_created_channels, new_chan);
+    log_warn(LD_SCHED, "[DP_KIST] Created channel %" PRIu64 " to %s, "
+                       "will send dummy next iteration.",
+             new_chan->global_identifier, addr_buf);
+
+  } SMARTLIST_FOREACH_END(chan);
+
+  /*channel_tls_connect(const tor_addr_t *addr, uint16_t port,
+                    const char *id_digest,
+                    const ed25519_public_key_t *ed_id)*/
 }
 
 /* Function of the scheduler interface: init() */
@@ -421,6 +552,8 @@ privacy_up_kist_scheduler_schedule(void)
   struct monotime_t now;
   struct timeval next_run;
   int64_t diff;
+
+  privacy_up_kist_scheduler_send_dummy_cells();
 
   if (!have_work()) {
     return;
